@@ -1,0 +1,61 @@
+
+name: Build NX2Apple iOS Demo IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-demo-ipa:
+    runs-on: xcode-27
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check Xcode
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: frontend-ios/Demo
+        run: xcodegen generate
+
+      - name: Build unsigned iOS app
+        working-directory: frontend-ios/Demo
+        run: |
+          xcodebuild \
+            -project ShellDemo.xcodeproj \
+            -scheme ShellDemo \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package IPA
+        run: |
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/ShellDemoApp.app"
+          test -d "$APP"
+
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
+
+          cd "$RUNNER_TEMP/ipa"
+          zip -qry "$GITHUB_WORKSPACE/NX2Apple-Demo-unsigned.ipa" Payload
+
+          test -s "$GITHUB_WORKSPACE/NX2Apple-Demo-unsigned.ipa"
+          unzip -t "$GITHUB_WORKSPACE/NX2Apple-Demo-unsigned.ipa"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: NX2Apple-Demo-unsigned-IPA
+          path: NX2Apple-Demo-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
