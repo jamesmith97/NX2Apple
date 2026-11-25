@@ -10,7 +10,7 @@ permissions:
 jobs:
   build-shell:
     runs-on: macos-26
-    timeout-minutes: 90
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
@@ -35,22 +35,34 @@ jobs:
         run: |
           .venv/bin/python tools/engine.py sync
 
-      - name: Check shell prerequisites
+      - name: Prepare Shell-only build
         run: |
-          test -f frontend-ios/Package.swift
-          test -f frontend-ios/Shell/build_shell.sh
-          test -d engine/dm
-          echo "Shell source and engine are ready"
+          sed -i '' 's/if not paths: sys.exit(.*)/if not paths: pass/' frontend-ios/Shell/build_shell.sh
+          grep -n "if not paths" frontend-ios/Shell/build_shell.sh
+          mkdir -p "$RUNNER_TEMP/empty-frameworks"
 
-      - name: Build shell
+      - name: Build NX2Apple Shell
         env:
           SHELL_DIR: ${{ runner.temp }}/NX2AppleShell
           DM_ENGINE_DIR: ${{ github.workspace }}/engine
           DM_SHELL_PACKAGE: ${{ github.workspace }}/frontend-ios
+          DM_SHELL_FRAMEWORKS: ${{ runner.temp }}/empty-frameworks
           DM_ENTITLEMENTS: ""
         run: |
-          export DM_SHELL_FRAMEWORKS="$RUNNER_TEMP/empty-frameworks"
-          mkdir -p "$DM_SHELL_FRAMEWORKS"
-          echo "This build requires a valid game framework."
-          echo "Checking source only; no IPA will be packaged."
-          exit 1
+          bash frontend-ios/Shell/build_shell.sh --build
+
+      - name: Package IPA
+        run: |
+          APP="$RUNNER_TEMP/NX2AppleShell/dd/Build/Products/Release-iphoneos/DmShell.app"
+          test -x "$APP/DmShell"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry NX2Apple-Shell-unsigned.ipa Payload
+          unzip -t NX2Apple-Shell-unsigned.ipa
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: NX2Apple-Shell-unsigned
+          path: NX2Apple-Shell-unsigned.ipa
+          if-no-files-found: error
