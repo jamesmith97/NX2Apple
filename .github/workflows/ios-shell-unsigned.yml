@@ -22,8 +22,7 @@ jobs:
         run: xcodebuild -version
 
       - name: Install dependencies
-        run: |
-          brew install xcodegen zstd spirv-cross glslang
+        run: brew install xcodegen zstd spirv-cross glslang
 
       - name: Set up Python
         run: |
@@ -32,24 +31,29 @@ jobs:
           .venv/bin/pip install lz4 capstone fonttools zbic nsz
 
       - name: Sync NX2Apple engine
-        run: |
-          .venv/bin/python tools/engine.py sync
+        run: .venv/bin/python tools/engine.py sync
 
       - name: Prepare Shell-only build
         run: |
-          sed -i '' 's/if not paths: sys.exit(.*)/if not paths: pass/' frontend-ios/Shell/build_shell.sh
-          grep -n "if not paths" frontend-ios/Shell/build_shell.sh
-          mkdir -p "$RUNNER_TEMP/empty-frameworks"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("frontend-ios/Shell/build_shell.sh")
+          s = p.read_text()
+          old = "if not paths: sys.exit('[RED] no framework named')"
+          new = "if not paths: pass  # Shell-only build"
+          if old not in s:
+              raise SystemExit("Framework validation line not found")
+          p.write_text(s.replace(old, new, 1))
+          PY
 
       - name: Build NX2Apple Shell
         env:
           SHELL_DIR: ${{ runner.temp }}/NX2AppleShell
           DM_ENGINE_DIR: ${{ github.workspace }}/engine
           DM_SHELL_PACKAGE: ${{ github.workspace }}/frontend-ios
-          DM_SHELL_FRAMEWORKS: ${{ runner.temp }}/empty-frameworks
+          DM_SHELL_FRAMEWORKS: " "
           DM_ENTITLEMENTS: ""
-        run: |
-          bash frontend-ios/Shell/build_shell.sh --build
+        run: bash frontend-ios/Shell/build_shell.sh --build
 
       - name: Package IPA
         run: |
