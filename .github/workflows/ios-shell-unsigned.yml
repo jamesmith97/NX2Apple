@@ -1,0 +1,56 @@
+
+name: Build NX2Apple Shell IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-shell:
+    runs-on: macos-26
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Check Xcode
+        run: xcodebuild -version
+
+      - name: Install dependencies
+        run: |
+          brew install xcodegen zstd spirv-cross glslang
+
+      - name: Set up Python
+        run: |
+          python3 -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install lz4 capstone fonttools zbic nsz
+
+      - name: Sync NX2Apple engine
+        run: |
+          .venv/bin/python tools/engine.py sync
+
+      - name: Check shell prerequisites
+        run: |
+          test -f frontend-ios/Package.swift
+          test -f frontend-ios/Shell/build_shell.sh
+          test -d engine/dm
+          echo "Shell source and engine are ready"
+
+      - name: Build shell
+        env:
+          SHELL_DIR: ${{ runner.temp }}/NX2AppleShell
+          DM_ENGINE_DIR: ${{ github.workspace }}/engine
+          DM_SHELL_PACKAGE: ${{ github.workspace }}/frontend-ios
+          DM_ENTITLEMENTS: ""
+        run: |
+          export DM_SHELL_FRAMEWORKS="$RUNNER_TEMP/empty-frameworks"
+          mkdir -p "$DM_SHELL_FRAMEWORKS"
+          echo "This build requires a valid game framework."
+          echo "Checking source only; no IPA will be packaged."
+          exit 1
